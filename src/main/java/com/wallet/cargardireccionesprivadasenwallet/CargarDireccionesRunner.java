@@ -33,6 +33,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Component
 public class CargarDireccionesRunner implements ApplicationRunner {
@@ -51,6 +52,9 @@ public class CargarDireccionesRunner implements ApplicationRunner {
         for(String mnemonicWord: mnemonicWordList) {
 
             System.out.println(mnemonicWord);
+            
+            // Creamos la wallet
+            crearWallet(mnemonicWord);
 
             List<PrivatePublicKey> listLegacyP2PKH = generateLegacyP2PKH(mnemonicWord, params, 50);
             cargarDireccionesPrivadasEnWallet(listLegacyP2PKH.stream().map(PrivatePublicKey::getPrivateKey).toList(), mnemonicWord, DescriptorEnum.PKH);
@@ -61,7 +65,63 @@ public class CargarDireccionesRunner implements ApplicationRunner {
             List<PrivatePublicKey> listLegacyNativeSegwit = generateNativeSegwit(mnemonicWord, params, 50);
             cargarDireccionesPrivadasEnWallet(listLegacyNativeSegwit.stream().map(PrivatePublicKey::getPrivateKey).toList(), mnemonicWord, DescriptorEnum.WPKH);
 
-            String s = "";
+            // Reescaneamos la wallet
+            rescanWallet(mnemonicWord);
+        }
+    }
+
+    private void rescanWallet(String mnemonicWord) throws IOException, InterruptedException {
+
+        String command = "D:\\bitcoin-27.0-win64\\bitcoin-27.0\\bin\\bitcoin-cli.exe -rpcconnect=192.168.1.191 -rpcport=8332 -rpcuser=bitcoin -rpcpassword=123456 -rpcwallet=\"" + mnemonicWord + "\" rescanblockchain";
+        Process exec = Runtime.getRuntime().exec(command);
+
+
+        // Wait for the process to complete within 5 seconds
+        if (exec.waitFor(8, TimeUnit.HOURS)) {
+            exec.destroy(); // Terminate the process if timeout occurs
+            System.out.println("Timeout occurred, process terminated.");
+        } else {
+            System.out.println("Process completed successfully.");
+        }
+
+        try (InputStream is = exec.getErrorStream();
+             InputStreamReader isr = new InputStreamReader(is);
+             BufferedReader br = new BufferedReader(isr);) {
+
+            String line;
+            StringBuilder texto = new StringBuilder();
+            while ((line = br.readLine()) != null) {
+                texto.append(line);
+            }
+
+            if(!texto.isEmpty()) {
+                System.out.println("Error al rescan la wallet " + mnemonicWord);
+                System.out.println("El error es  " + texto);
+                throw new RuntimeException("Error al rescan la wallet " + mnemonicWord);
+            }
+        }
+    }
+
+    private void crearWallet(String mnemonicWord) throws IOException {
+
+        String command = "D:\\bitcoin-27.0-win64\\bitcoin-27.0\\bin\\bitcoin-cli.exe -rpcconnect=192.168.1.191 -rpcport=8332 -rpcuser=bitcoin -rpcpassword=123456 createwallet \"" + mnemonicWord + "\"";
+        Process exec = Runtime.getRuntime().exec(command);
+
+        try (InputStream is = exec.getErrorStream();
+             InputStreamReader isr = new InputStreamReader(is);
+             BufferedReader br = new BufferedReader(isr);) {
+
+            String line;
+            StringBuilder texto = new StringBuilder();
+            while ((line = br.readLine()) != null) {
+                texto.append(line);
+            }
+
+            if(!texto.isEmpty()) {
+                System.out.println("Error al crear la wallet " + mnemonicWord);
+                System.out.println("El error es  " + texto);
+                throw new RuntimeException("Error al crear la wallet " + mnemonicWord);
+            }
         }
     }
 
